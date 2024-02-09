@@ -14,7 +14,13 @@
  * example documentation comment
  */
 
-
+/**
+ * @param fileinfo a structure containing information about the file
+ * @param fileName the name of the file
+ * @param isDir 0 (false) if it's not a directory, 1 (true) if it is.
+ * @param prefix a string to go before the parsed file string. Intended to be used for indentation
+ * @returns a string beginning with the prefix, followed by the fileName, and then with either (directory) or (n bytes) with n being the number of bytes a file is
+ */
 char* elementToString(struct stat *fileinfo, char* fileName, int isDir, char* prefix){
     int fileSize = fileinfo->st_size;
     char* parsedFile;
@@ -33,6 +39,10 @@ char* elementToString(struct stat *fileinfo, char* fileName, int isDir, char* pr
 /**
  * @param pathName the name of a path (based of where the code is executed from) to the directory
  * @param exactPatternMatch filters elements to only ones whose children have 
+ * @param levelsDeep the number of directories descended into, with the origionally input directory from main being 0. Used to determine indentation
+ * @param toPrint a stack that holds all the data to be printed
+ * @returns the number of elements inside the directory at pathName that contain an instance of exactPaternMatch in the name
+ * @returns 0 if the given path cannot be descended into either due lack of permission, the fact that it's not a directory, or any other unforseen error.
  */
 int collectElements(char *pathName, char *exactPatternMatch, int levelsDeep, struct stack_t* toPrint){
     char* prefix = (char*) malloc(levelsDeep*4 + 1);
@@ -40,10 +50,6 @@ int collectElements(char *pathName, char *exactPatternMatch, int levelsDeep, str
     for(int i = 0; i < levelsDeep; i++){
         strcat(prefix, "    ");
     }
-    //printf("entering level %d: %s\n", levelsDeep, pathName);
-    //printf("%ld\n", strlen(pathName));
-    //char* constPathName = (char*) malloc(strlen(pathName) + 1);
-    //strcpy(constPathName, pathName);
     DIR *currentDir = opendir(pathName);
     int containsMatchingElements = 0;
     if (currentDir == NULL){
@@ -54,8 +60,6 @@ int collectElements(char *pathName, char *exactPatternMatch, int levelsDeep, str
     }
 
     struct dirent *pDirent = 0;
-    //char* dirName = (char*)malloc(sizeof(pDirent->d_name));
-    //char dirName[sizeof(pDirent->d_name)]; 
     struct stat *fileinfo;
     char* fullPath;
     while((pDirent = readdir(currentDir))){
@@ -63,34 +67,23 @@ int collectElements(char *pathName, char *exactPatternMatch, int levelsDeep, str
         char* dirName = pDirent->d_name;
         fullPath = malloc(strlen(pathName) + 1 + strlen(dirName) + 1);
         sprintf(fullPath, "%s/%s", pathName, dirName);
-        //printf("%s ---- ", fullPath);
         lstat(fullPath, fileinfo);
         if(S_ISDIR(fileinfo->st_mode)){
             if(strcmp(dirName, ".") != 0 && strcmp(dirName, "..") != 0){
-                //printf("descending into %s", fullPath);
                 int matchingElements = collectElements(fullPath, exactPatternMatch, levelsDeep + 1, toPrint);
                 if(matchingElements > 0 ){
                     char* dirString = elementToString(fileinfo, dirName, 1, prefix);
-                    //printf("%s\n", dirString);
                     push(toPrint, dirString);
-                    //free(dirString);
-                    //printf("\n");
                     containsMatchingElements += matchingElements;
                 }else if(strstr(dirName, exactPatternMatch) != NULL){
                     char* dirString = elementToString(fileinfo,dirName, 1, prefix);
-                    //printf("%s\n", dirString);
                     push(toPrint, dirString);
-                    //free(dirString);
-                    //printf("\n");
                 }
             }
         }else{
             if(strstr(dirName, exactPatternMatch)){
                 char* fileString = elementToString(fileinfo, dirName, 0, prefix);
-                //printf("%s\n", fileString);
                 push(toPrint, fileString);
-                //free(fileString);
-                //printf("\n");
                 containsMatchingElements += 1;
             }
         }
@@ -109,7 +102,6 @@ int collectElements(char *pathName, char *exactPatternMatch, int levelsDeep, str
  * @param defaultFilePath[] a string containing the file path you would like to start with, 
  * relative to where the code was executed
  * @param exactPatternMatch[] a string to filter the listed files, or an empty string to not filter
- * 
  * @returns a stack where each entry is a string. These strings are ordered in such a way that printstack() will 
  * print the desired result of a recursive ls, with only files adhering to the exactPatternMatch and their paths being
  * printed, along with each element having (directory) or (n bytes) shown after the name for further representations
